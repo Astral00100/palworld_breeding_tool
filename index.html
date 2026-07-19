@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Breeding Ledger</title>
+<meta name="theme-color" content="#16241C">
+<meta name="description" content="Track your Palworld breeding combos, synced through your own OneDrive.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js"></script>
+<style>
+  :root{
+    --bg:#16241C;
+    --surface:#1F3327;
+    --surface-2:#28402F;
+    --surface-3:#31493A;
+    --border:#375140;
+    --text:#F1ECDC;
+    --text-muted:#9AB09E;
+    --accent:#E8B84B;
+    --accent-dark:#C9942A;
+    --danger:#D8785A;
+    --danger-dark:#B25A3F;
+    --c0:#C9942A; --c1:#4C948E; --c2:#B15C77; --c3:#6A7BC9; --c4:#C97540;
+    --egg: 50% 50% 50% 50% / 62% 62% 38% 38%;
+    --font-display:'Baloo 2', system-ui, sans-serif;
+    --font-body:'Nunito', system-ui, sans-serif;
+    --font-mono:'Space Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(232,184,75,0.08), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(76,148,142,0.10), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;} }
+
+  ::selection{ background:var(--accent); color:#20301F; }
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; }
+
+  .app{ max-width:960px; margin:0 auto; padding:28px 18px 90px; }
+
+  /* ---------- Header ---------- */
+  .hero{ padding:6px 4px 22px; border-bottom:1px solid var(--border); margin-bottom:20px; }
+  .eyebrow{
+    font-family:var(--font-mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--accent); display:flex; align-items:center; gap:8px; margin-bottom:6px;
+  }
+  .eyebrow .egg-dot{ width:9px; height:9px; background:var(--accent); border-radius:var(--egg); display:inline-block; }
+  h1{
+    font-family:var(--font-display); font-weight:800; font-size:clamp(28px,5vw,40px);
+    margin:0 0 6px; letter-spacing:-0.01em;
+  }
+  .hero p{ margin:0; color:var(--text-muted); font-size:15px; max-width:56ch; line-height:1.5; }
+  .stats{ display:flex; gap:18px; margin-top:16px; flex-wrap:wrap; }
+  .stat{ font-family:var(--font-mono); font-size:13px; color:var(--text-muted); }
+  .stat b{ color:var(--text); font-size:15px; }
+
+  /* ---------- Tabs ---------- */
+  .tabs{ display:flex; gap:6px; margin-bottom:18px; background:var(--surface); padding:5px; border-radius:14px; border:1px solid var(--border); }
+  .tab-btn{
+    flex:1; padding:10px 14px; border:none; background:transparent; color:var(--text-muted);
+    font-family:var(--font-display); font-weight:600; font-size:14.5px; border-radius:10px; cursor:pointer;
+    transition:background .15s, color .15s;
+  }
+  .tab-btn.active{ background:var(--accent); color:#20301F; }
+  .tab-btn:not(.active):hover{ background:var(--surface-2); color:var(--text); }
+
+  .panel{ display:none; }
+  .panel.active{ display:block; animation:fade .25s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  /* ---------- Buttons ---------- */
+  .btn{
+    font-family:var(--font-body); font-weight:700; font-size:14px; padding:9px 16px; border-radius:10px;
+    border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer;
+    transition:background .15s, border-color .15s, transform .1s;
+  }
+  .btn:hover{ background:var(--surface-3); }
+  .btn:active{ transform:scale(.97); }
+  .btn-primary{ background:var(--accent); border-color:var(--accent); color:#20301F; }
+  .btn-primary:hover{ background:var(--accent-dark); border-color:var(--accent-dark); }
+  .btn-danger{ background:transparent; border-color:var(--danger); color:var(--danger); }
+  .btn-danger:hover{ background:var(--danger); color:#241512; }
+  .btn-ghost{ background:transparent; border-color:transparent; color:var(--text-muted); padding:8px 10px; }
+  .btn-ghost:hover{ color:var(--text); background:var(--surface-2); }
+  .btn-sm{ padding:6px 10px; font-size:12.5px; border-radius:8px; }
+  .icon-btn{ width:34px; height:34px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:9px; }
+
+  /* ---------- Toolbar / filters ---------- */
+  .toolbar{ display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; align-items:flex-end; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); font-family:var(--font-mono); }
+  input[type=text], input[type=search], textarea, select{
+    font-family:var(--font-body); font-size:14.5px; background:var(--surface); border:1px solid var(--border);
+    color:var(--text); padding:9px 12px; border-radius:9px; min-width:150px;
+  }
+  select{ cursor:pointer; }
+  textarea{ font-family:var(--font-mono); font-size:12.5px; resize:vertical; }
+  input::placeholder{ color:#6B8474; }
+  .checkline{ display:flex; align-items:center; gap:7px; font-size:13px; color:var(--text-muted); padding-bottom:9px; }
+  .checkline input{ accent-color:var(--accent); width:15px; height:15px; }
+  .toolbar-spacer{ flex:1; }
+
+  /* ---------- Add form ---------- */
+  .add-form{
+    background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:18px;
+    margin-bottom:20px; display:none;
+  }
+  .add-form.open{ display:block; animation:fade .2s ease; }
+  .add-form h3{ margin:0 0 14px; font-family:var(--font-display); font-size:17px; }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  .form-grid .field{ min-width:0; }
+  .form-grid input, .form-actions textarea{ width:100%; }
+  .form-actions{ display:flex; gap:10px; margin-top:12px; justify-content:flex-end; flex-wrap:wrap; }
+  @media (max-width:640px){ .form-grid{ grid-template-columns:1fr; } }
+
+  /* ---------- Pal badge (signature egg shape) ---------- */
+  .pal-badge{
+    display:inline-flex; align-items:center; justify-content:center; text-align:center;
+    padding:8px 14px; border-radius:var(--egg); font-family:var(--font-display); font-weight:600;
+    font-size:13.5px; color:#fff; line-height:1.15; min-width:64px; text-shadow:0 1px 2px rgba(0,0,0,.25);
+    box-shadow:inset 0 -3px 0 rgba(0,0,0,.12);
+  }
+  .c0{ background:var(--c0); } .c1{ background:var(--c1); } .c2{ background:var(--c2); }
+  .c3{ background:var(--c3); } .c4{ background:var(--c4); }
+
+  /* ---------- Combo cards ---------- */
+  .combo-grid{ display:flex; flex-direction:column; gap:10px; }
+  .combo-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px;
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  }
+  .combo-flow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex:1; }
+  .plus, .arrow{ font-family:var(--font-mono); color:var(--text-muted); font-size:15px; }
+  .arrow{ color:var(--accent); font-size:18px; }
+  .combo-notes{ width:100%; font-size:12.5px; color:var(--text-muted); margin-top:2px; font-style:italic; }
+  .combo-actions{ display:flex; gap:6px; margin-left:auto; }
+
+  .egg-tag{
+    font-family:var(--font-mono); font-size:11.5px; padding:5px 10px; border-radius:8px;
+    border:1px solid var(--border); color:var(--text-muted); white-space:nowrap;
+  }
+
+  /* ---------- Autocomplete ---------- */
+  .ac-wrap{ position:relative; }
+  .ac-list{
+    position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--surface-3);
+    border:1px solid var(--border); border-radius:10px; max-height:220px; overflow-y:auto; z-index:30;
+    display:none; box-shadow:0 8px 24px rgba(0,0,0,.35);
+  }
+  .ac-list.open{ display:block; }
+  .ac-item{ padding:9px 12px; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:8px; justify-content:space-between; }
+  .ac-item:hover, .ac-item.active{ background:var(--surface-2); }
+  .ac-item .ac-num{ font-family:var(--font-mono); font-size:11px; color:var(--text-muted); }
+
+  /* ---------- Palpedia ---------- */
+  .pdx-toolbar{ display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; align-items:flex-end; }
+  .pdx-table{ display:flex; flex-direction:column; gap:6px; }
+  .pdx-row{
+    display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:10px 14px; flex-wrap:wrap;
+  }
+  .pdx-num{ font-family:var(--font-mono); font-size:12px; color:var(--text-muted); min-width:44px; }
+  .pdx-elements{ display:flex; gap:5px; flex-wrap:wrap; }
+  .rarity-chip{
+    font-family:var(--font-mono); font-size:11px; padding:4px 9px; border-radius:7px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;
+  }
+  .rarity-common{ background:var(--surface-2); color:var(--text-muted); }
+  .rarity-rare{ background:rgba(76,148,142,.18); color:#7FC5BF; }
+  .rarity-epic{ background:rgba(106,123,201,.18); color:#9EACE0; }
+  .rarity-legendary{ background:rgba(232,184,75,.18); color:var(--accent); }
+  .rarity-unknown{ background:transparent; color:var(--text-muted); border:1px dashed var(--border); }
+  .event-chip{ font-family:var(--font-mono); font-size:10.5px; color:#E28C9B; border:1px solid #6B3B47; padding:3px 7px; border-radius:6px; }
+  .pdx-name{ font-family:var(--font-display); font-weight:600; font-size:14.5px; min-width:110px; }
+  .pdx-spacer{ flex:1; }
+  .pdx-empty-tag{ color:var(--text-muted); font-size:12px; font-style:italic; }
+
+  .empty-state{
+    text-align:center; padding:50px 20px; color:var(--text-muted); border:1px dashed var(--border);
+    border-radius:16px; font-size:14.5px;
+  }
+  .empty-state b{ display:block; color:var(--text); font-family:var(--font-display); font-size:17px; margin-bottom:6px; }
+
+  /* ---------- Path finder ---------- */
+  .pf-search{ display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; }
+  .pf-search input{ flex:1; min-width:220px; }
+  .tree-wrap{ background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px; min-height:120px; }
+  details.tree-node{ margin-left:0; }
+  details.tree-node > summary{ list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
+  details.tree-node > summary::-webkit-details-marker{ display:none; }
+  details.tree-node > summary::before{
+    content:'▸'; color:var(--text-muted); font-size:11px; transition:transform .15s; display:inline-block;
+  }
+  details.tree-node[open] > summary::before{ transform:rotate(90deg); }
+  .recipe-list{ margin:10px 0 6px 22px; padding-left:14px; border-left:2px dashed var(--border); display:flex; flex-direction:column; gap:12px; }
+  .recipe-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .recipe-tag{ font-family:var(--font-mono); font-size:10.5px; color:var(--text-muted); background:var(--surface-2); padding:3px 8px; border-radius:6px; width:100%; }
+  .leaf{ display:flex; align-items:center; gap:9px; }
+  .leaf-note{ font-size:12px; color:var(--text-muted); font-style:italic; }
+  .pf-empty{ color:var(--text-muted); font-size:14px; text-align:center; padding:30px 10px; }
+  .pf-cta{ display:block; margin:10px auto 0; }
+
+  /* ---------- Settings / backup ---------- */
+  .settings-toggle{ position:fixed; top:20px; right:20px; z-index:20; }
+  .settings-pop{
+    position:fixed; top:64px; right:20px; width:min(360px, calc(100vw - 40px)); background:var(--surface);
+    border:1px solid var(--border); border-radius:14px; padding:16px; z-index:20; display:none;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  .settings-pop.open{ display:block; animation:fade .15s ease; }
+  .settings-pop h4{ margin:0 0 4px; font-family:var(--font-display); font-size:15px; }
+  .settings-pop p{ margin:0 0 8px; font-size:12px; color:var(--text-muted); }
+  .settings-pop .row{ display:flex; gap:8px; margin-bottom:10px; }
+
+  /* ---------- Toast ---------- */
+  .toast{
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px); opacity:0;
+    background:var(--surface-3); border:1px solid var(--border); color:var(--text); padding:11px 18px;
+    border-radius:10px; font-size:13.5px; pointer-events:none; transition:opacity .2s, transform .2s; z-index:50;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .loading{ text-align:center; padding:60px 20px; color:var(--text-muted); font-family:var(--font-mono); font-size:13px; }
+
+  /* ---------- Auth gate ---------- */
+  .auth-gate{
+    position:fixed; inset:0; background:var(--bg); z-index:100; display:flex; align-items:center;
+    justify-content:center; padding:24px;
+  }
+  .auth-card{
+    max-width:400px; text-align:center; background:var(--surface); border:1px solid var(--border);
+    border-radius:18px; padding:36px 28px;
+  }
+  .auth-card .egg-dot{ width:14px; height:14px; background:var(--accent); border-radius:var(--egg); display:inline-block; margin-bottom:14px; }
+  .auth-card h2{ font-family:var(--font-display); font-size:22px; margin:0 0 10px; }
+  .auth-card p{ color:var(--text-muted); font-size:14px; line-height:1.5; margin:0 0 22px; }
+  .auth-card .btn{ width:100%; padding:12px; font-size:15px; }
+  .auth-error{ color:var(--danger); font-size:12.5px; margin-top:14px; display:none; }
+  .auth-error.show{ display:block; }
+
+  /* ---------- Sync status ---------- */
+  .sync-pill{
+    position:fixed; top:20px; right:66px; z-index:20; font-family:var(--font-mono); font-size:11.5px;
+    padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface);
+    color:var(--text-muted); display:flex; align-items:center; gap:6px;
+  }
+  .sync-dot{ width:7px; height:7px; border-radius:50%; background:var(--text-muted); }
+  .sync-pill.synced .sync-dot{ background:#7FC5BF; }
+  .sync-pill.offline .sync-dot{ background:var(--danger); }
+  .sync-pill.syncing .sync-dot{ background:var(--accent); animation:pulse 1.2s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+  .offline-banner{
+    display:none; background:rgba(216,120,90,.12); border:1px solid var(--danger-dark); color:var(--danger);
+    border-radius:12px; padding:11px 16px; font-size:13px; margin-bottom:16px; align-items:center; gap:8px;
+  }
+  .offline-banner.show{ display:flex; }
+  .offline-banner .btn{ margin-left:auto; }
+
+  [data-needs-online].is-disabled{ opacity:.45; pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="authGate" class="auth-gate">
+  <div class="auth-card">
+    <span class="egg-dot"></span>
+    <h2>Connect your OneDrive</h2>
+    <p>Your breeding combos and Palpedia live in a private app folder in your OneDrive, so this same data follows you across desktop and Android. Nothing else in your OneDrive is touched.</p>
+    <button class="btn btn-primary" id="signInBtn">Sign in with Microsoft</button>
+    <div class="auth-error" id="authError"></div>
+  </div>
+</div>
+
+<div class="app">
+
+  <div class="sync-pill" id="syncPill"><span class="sync-dot"></span><span id="syncPillText">Connecting…</span></div>
+  <button class="btn btn-ghost icon-btn settings-toggle" id="settingsToggle" title="Account & backup" aria-label="Settings">⚙</button>
+  <div class="settings-pop" id="settingsPop">
+    <h4>Account</h4>
+    <p id="acctEmail">Signed in</p>
+    <div class="row">
+      <button class="btn btn-sm" id="syncNowBtn">Sync now</button>
+      <button class="btn btn-sm btn-danger" id="signOutBtn">Sign out</button>
+    </div>
+    <h4 style="margin-top:16px;">Manual backup</h4>
+    <p>A local safety copy, separate from OneDrive sync.</p>
+    <div class="row">
+      <button class="btn btn-sm" id="exportBtn">Copy backup JSON</button>
+      <button class="btn btn-sm btn-danger" id="resetBtn">Erase all data</button>
+    </div>
+    <textarea id="backupArea" rows="5" placeholder="Paste a backup JSON here to restore it..."></textarea>
+    <div class="row" style="margin-top:8px;">
+      <button class="btn btn-sm btn-primary" id="importBtn">Restore from pasted JSON</button>
+    </div>
+  </div>
+
+  <div class="offline-banner" id="offlineBanner">
+    ⚠ You're offline — showing your last synced copy. Reconnect to make changes.
+  </div>
+
+  <div class="hero">
+    <div class="eyebrow"><span class="egg-dot"></span>Pal Breeding Ledger</div>
+    <h1>Your breeding combos, your data</h1>
+    <p>The wikis don't agree with each other. Log the combinations you've actually confirmed, filter by parent or child, and chart multi-step breeding paths to whatever Pal you're chasing — synced through your own OneDrive.</p>
+    <div class="stats">
+      <div class="stat"><b id="statCombos">0</b> combos logged</div>
+      <div class="stat"><b id="statPals">0</b> pals tracked</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="ledger">Ledger</button>
+    <button class="tab-btn" data-tab="pathfinder">Path Finder</button>
+    <button class="tab-btn" data-tab="palpedia">Palpedia</button>
+  </div>
+
+  <!-- LEDGER PANEL -->
+  <div class="panel active" id="panel-ledger">
+    <div class="toolbar">
+      <button class="btn btn-primary" id="openAddForm">+ Log a combo</button>
+      <div class="toolbar-spacer"></div>
+    </div>
+
+    <div class="add-form" id="addForm">
+      <h3 id="formTitle">Log a new combo</h3>
+      <div class="form-grid">
+        <div class="field">
+          <label for="fParent1">Parent 1</label>
+          <div class="ac-wrap"><input type="text" id="fParent1" placeholder="e.g. Lamball" autocomplete="off"></div>
+        </div>
+        <div class="field">
+          <label for="fParent2">Parent 2</label>
+          <div class="ac-wrap"><input type="text" id="fParent2" placeholder="e.g. Cattiva" autocomplete="off"></div>
+        </div>
+        <div class="field">
+          <label for="fChild">Child</label>
+          <div class="ac-wrap"><input type="text" id="fChild" placeholder="e.g. Chikipi" autocomplete="off"></div>
+        </div>
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label for="fEggType">Egg type</label>
+        <select id="fEggType">
+          <option value="">Unspecified</option>
+          <option>Common</option>
+          <option>Verdant</option>
+          <option>Scorching</option>
+          <option>Damp</option>
+          <option>Electric</option>
+          <option>Frozen</option>
+          <option>Rocky</option>
+          <option>Dark</option>
+          <option>Dragon</option>
+          <option>Alpha Egg</option>
+          <option>Mutated Egg</option>
+          <option>Ominous Egg</option>
+        </select>
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label for="fNotes">Notes (optional)</label>
+        <textarea id="fNotes" rows="2" placeholder="Anything worth remembering — probability, conditions, etc."></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn" id="cancelForm">Cancel</button>
+        <button class="btn btn-primary" id="saveCombo">Save combo</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="field">
+        <label for="filterParentA">Parent contains</label>
+        <div class="ac-wrap"><input type="text" id="filterParentA" placeholder="Search by parent..." autocomplete="off"></div>
+      </div>
+      <div class="field" id="parentBField" style="display:none;">
+        <label for="filterParentB">And parent contains</label>
+        <div class="ac-wrap"><input type="text" id="filterParentB" placeholder="Second parent..." autocomplete="off"></div>
+      </div>
+      <div class="checkline">
+        <input type="checkbox" id="bothParents"><label for="bothParents" style="cursor:pointer;">Match both parents</label>
+      </div>
+      <div class="field">
+        <label for="filterChild">Child contains</label>
+        <div class="ac-wrap"><input type="text" id="filterChild" placeholder="Search by result..." autocomplete="off"></div>
+      </div>
+      <div class="field">
+        <label for="filterEggType">Egg type</label>
+        <select id="filterEggType">
+          <option value="">Any</option>
+          <option>Common</option>
+          <option>Verdant</option>
+          <option>Scorching</option>
+          <option>Damp</option>
+          <option>Electric</option>
+          <option>Frozen</option>
+          <option>Rocky</option>
+          <option>Dark</option>
+          <option>Dragon</option>
+          <option>Alpha Egg</option>
+          <option>Mutated Egg</option>
+          <option>Ominous Egg</option>
+        </select>
+      </div>
+      <button class="btn btn-sm" id="clearFilters">Clear</button>
+    </div>
+
+    <div class="combo-grid" id="comboList"></div>
+  </div>
+
+  <!-- PATH FINDER PANEL -->
+  <div class="panel" id="panel-pathfinder">
+    <div class="pf-search">
+      <div class="ac-wrap" style="flex:1; min-width:220px;"><input type="text" id="pfInput" placeholder="Which Pal are you trying to breed?" autocomplete="off" style="width:100%;"></div>
+      <button class="btn btn-primary" id="pfGo">Find paths</button>
+    </div>
+    <div class="tree-wrap" id="pfResults">
+      <div class="pf-empty">Enter a target Pal above to see every recorded route to it — including chains through Pals you'd need to breed first.</div>
+    </div>
+  </div>
+
+  <!-- PALPEDIA PANEL -->
+  <div class="panel" id="panel-palpedia">
+    <p style="color:var(--text-muted); font-size:13.5px; margin:0 0 16px; max-width:60ch;">
+      A reference list of Pals seeded from community data — elements weren't reliably extractable for every entry, so some show as blank. Click any entry to correct or fill it in; it's yours to fix, same as the ledger.
+    </p>
+    <div class="pdx-toolbar">
+      <div class="field">
+        <label for="pdxSearch">Name or number</label>
+        <input type="text" id="pdxSearch" placeholder="Search Palpedia...">
+      </div>
+      <div class="field">
+        <label for="pdxRarity">Rarity</label>
+        <select id="pdxRarity">
+          <option value="">Any</option>
+          <option>Common</option><option>Rare</option><option>Epic</option><option>Legendary</option><option>Unknown</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="pdxElement">Element</label>
+        <select id="pdxElement">
+          <option value="">Any</option>
+          <option>Neutral</option><option>Grass</option><option>Water</option><option>Fire</option><option>Electric</option>
+          <option>Ice</option><option>Ground</option><option>Dark</option><option>Dragon</option>
+        </select>
+      </div>
+      <div class="pdx-spacer"></div>
+      <button class="btn btn-sm" id="pdxClear">Clear</button>
+      <button class="btn btn-primary btn-sm" id="pdxAddNew">+ Add Pal</button>
+    </div>
+
+    <div class="add-form" id="pdxForm">
+      <h3 id="pdxFormTitle">Add a Pal</h3>
+      <div class="form-grid">
+        <div class="field">
+          <label for="pdxName">Name</label>
+          <input type="text" id="pdxName" placeholder="e.g. Chikipi">
+        </div>
+        <div class="field">
+          <label for="pdxNum">Dex number (optional)</label>
+          <input type="text" id="pdxNum" placeholder="e.g. 003">
+        </div>
+        <div class="field">
+          <label for="pdxRarityInput">Rarity</label>
+          <select id="pdxRarityInput">
+            <option>Unknown</option><option>Common</option><option>Rare</option><option>Epic</option><option>Legendary</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label for="pdxElements">Element(s) — comma separated</label>
+        <input type="text" id="pdxElements" placeholder="e.g. Fire, Water" style="width:100%;">
+      </div>
+      <div class="form-actions">
+        <button class="btn" id="pdxCancel">Cancel</button>
+        <button class="btn btn-primary" id="pdxSave">Save Pal</button>
+      </div>
+    </div>
+
+    <div class="pdx-table" id="pdxTable"></div>
+  </div>
+
+  <datalist id="palNames"></datalist>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const $$ = s => document.querySelectorAll(s);
+
+  // ---------------------------------------------------------------
+  // CONFIG — fill these in after you register the app in Azure.
+  // See README.md for step-by-step instructions.
+  // ---------------------------------------------------------------
+  const CONFIG = {
+    clientId: "PASTE_YOUR_AZURE_CLIENT_ID_HERE",
+    authority: "https://login.microsoftonline.com/consumers", // personal Microsoft accounts (OneDrive personal)
+    scopes: ["Files.ReadWrite.AppFolder", "User.Read"],
+    dataFileName: "pal-breeding-data.json"
+  };
+
+  const msalInstance = (typeof msal !== 'undefined') ? new msal.PublicClientApplication({
+    auth: {
+      clientId: CONFIG.clientId,
+      authority: CONFIG.authority,
+      redirectUri: window.location.origin + window.location.pathname
+    },
+    cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false }
+  }) : null;
+
+  let account = null;
+  let isOnline = navigator.onLine;
+  let hasLoadedOnce = false;
+  const LOCAL_CACHE_KEY = 'pal-breeding-local-cache';
+
+  let combos = [];
+  let editingId = null;
+  let ready = false;
+  let palpedia = [];
+  let pdxEditingId = null;
+  let pdxReady = false;
+
+  // Seed data: [dexNumber, name, rarity, elements[], isEvent]
+  // Elements are only included where they could be reliably cross-checked; many entries
+  // are intentionally left blank for the person to fill in rather than risk bad data.
+  const PALPEDIA_SEED = [
+    ['001','Lamball','Common',['Neutral']], ['002','Cattiva','Common',['Neutral']], ['003','Chikipi','Common',['Neutral']],
+    ['004','Lifmunk','Common',['Grass']], ['005','Fuack','Common',['Water']], ['005B','Fuack Ignis','Common',['Fire','Water']],
+    ['006','Vixy','Common',['Neutral']], ['007','Celaray','Common',['Water']], ['007B','Celaray Lux','Common',['Electric','Water']],
+    ['008','Cremis','Common',['Neutral']], ['009','Croajiro','Common',['Water']], ['009B','Croajiro Noct','Rare',['Dark','Water']],
+    ['010','Herbil','Common',['Grass','Neutral']], ['011','Teafant','Common',['Water']], ['012','Gumoss','Common',['Grass','Ground']],
+    ['013','Pupperai','Common',['Ground']], ['014','Clovee','Common',['Grass','Neutral']], ['015','Jolthog','Common',['Electric']],
+    ['015B','Jolthog Cryst','Common',['Ice']], ['016','Depresso','Common',['Dark']], ['017','Pengullet','Common',['Ice','Water']],
+    ['017B','Pengullet Lux','Common',['Electric','Water']], ['018','Penking','Rare',['Ice','Water']], ['018B','Penking Lux','Rare',['Electric','Water']],
+    ['019','Hoocrates','Common',['Dark']], ['020','Melpaca','Common',['Neutral']], ['021','Kingpaca','Epic',['Neutral']],
+    ['021B','Kingpaca Cryst','Epic',['Ice']], ['022','Daedream','Common',['Dark']], ['023','Tanzee','Common',['Grass']],
+    ['023B','Tanzee Ignis','Common',['Fire']], ['024','Nox','Rare',['Dark']], ['025','Flambelle','Common',['Fire']],
+    ['026','Rooby','Common',['Fire']], ['027','Mau','Common',['Dark']], ['027B','Mau Cryst','Common',['Ice']],
+    ['028','Rushoar','Common',['Ground']], ['029','Foxparks','Common',['Fire']], ['029B','Foxparks Cryst','Common',['Ice']],
+    ['030','Killamari','Common',['Dark','Water']], ['030B','Killamari Primo','Common',['Neutral','Water']], ['031','Fuddler','Common',['Ground']],
+    ['032','Eikthyrdeer','Rare',['Neutral']], ['032B','Eikthyrdeer Terra','Rare',['Ground']], ['033','Direhowl','Common',['Neutral']],
+    ['034','Caprity','Common',['Grass']], ['034B','Caprity Noct','Common',['Dark']], ['035','Swee','Common',['Ice']],
+    ['036','Sweepa','Rare',['Ice']], ['037','Turtacle','Common',['Water']], ['037B','Turtacle Terra','Common',['Ground','Water']],
+    ['038','Hangyu','Common',['Ground']], ['038B','Hangyu Cryst','Common',['Ice']], ['039','Woolipop','Common',['Neutral']],
+    ['039B','Woolipop Terra','Common',['Ground']], ['040','Mozzarina','Common',['Neutral']], ['041','Azurobe','Rare',['Dragon','Water']],
+    ['041B','Azurobe Cryst','Epic',['Dragon','Ice']], ['042','Sparkit','Common',['Electric']], ['043','Kelpsea','Common',['Water']],
+    ['043B','Kelpsea Ignis','Common',['Fire']], ['044','Ribbuny','Common',['Neutral']], ['044B','Ribbuny Botan','Common',['Grass']],
+    ['045','Jelliette','Common',['Water']], ['046','Jellroy','Common',['Dark','Water']], ['047','Amione','Common',['Water']],
+    ['048','Gloopie','Rare',['Dark','Water']], ['048B','Gloopie Primo','Rare',[]], ['049','Galeclaw','Common',['Neutral']],
+    ['050','Wispaw','Rare',['Dark']], ['051','Nitewing','Common',['Neutral']], ['052','Tombat','Rare',['Dark']],
+    ['053','Tocotoco','Common',['Neutral']], ['054','Univolt','Rare',['Electric']], ['054B','Univolt Cryst','Rare',[]],
+    ['055','Gobfin','Common',['Water']], ['055B','Gobfin Ignis','Common',['Fire']], ['056','Loupmoon','Common',['Dark']],
+    ['056B','Loupmoon Cryst','Common',['Ice']], ['057','Cawgnito','Common',['Dark']], ['058','Arsox','Common',['Fire']],
+    ['059','Muffly','Common',[]], ['060','Bristla','Common',['Grass']], ['061','Cinnamoth','Common',['Grass']],
+    ['062','Puffolt','Common',['Electric']], ['063','Elphidran','Rare',['Dragon']], ['063B','Elphidran Aqua','Epic',['Dragon','Water']],
+    ['064','Vanwyrm','Rare',['Dark','Fire']], ['064B','Vanwyrm Cryst','Rare',['Dark','Ice']], ['065','Felbat','Rare',['Dark']],
+    ['066','Vaelet','Epic',['Grass']], ['067','Beegarde','Common',['Grass']], ['068','Elizabee','Epic',['Grass']],
+    ['069','Lovander','Rare',['Dark']], ['070','Grintale','Rare',['Neutral']], ['071','Tarantriss','Common',['Dark']],
+    ['072','Polapup','Rare',['Ice','Water']], ['072B','Polapup Terra','Rare',[]], ['073','Leezpunk','Common',['Dark']],
+    ['073B','Leezpunk Ignis','Common',['Fire']], ['074','Gorirat','Rare',['Neutral']], ['074B','Gorirat Terra','Rare',['Ground']],
+    ['075','Surfent','Common',['Water']], ['075B','Surfent Terra','Rare',['Ground']], ['076','Robinquill','Rare',['Grass']],
+    ['076B','Robinquill Terra','Rare',['Grass','Ground']], ['077','Flopie','Common',['Grass']], ['078','Wixen','Rare',['Fire']],
+    ['078B','Wixen Noct','Rare',['Dark','Fire']], ['079','Katress','Rare',['Dark']], ['079B','Katress Ignis','Rare',['Dark','Fire']],
+    ['080','Helzephyr','Rare',['Dark']], ['080B','Helzephyr Lux','Epic',['Dark','Electric']], ['081','Elgrove','Rare',['Grass']],
+    ['081B','Elgrove Cryst','Rare',[]], ['082','Lunaris','Rare',['Neutral']], ['083','Fenglope','Common',['Neutral']],
+    ['083B','Fenglope Lux','Common',['Electric']], ['084','Dinossom','Rare',['Dragon','Grass']], ['084B','Dinossom Lux','Rare',['Dragon','Electric']],
+    ['085','Bushi','Rare',['Fire']], ['085B','Bushi Noct','Rare',['Dark','Fire']], ['086','Munchill','Common',['Ice','Water']],
+    ['087','Mammorest','Epic',['Grass','Ground']], ['087B','Mammorest Cryst','Epic',['Ground','Ice']], ['088','Finsider','Common',['Water']],
+    ['088B','Finsider Ignis','Common',['Fire','Water']], ['089','Petallia','Epic',['Grass']], ['089B','Petallia Ignis','Epic',[]],
+    ['090','Leafan','Rare',['Grass']], ['091','Incineram','Common',['Dark','Fire']], ['091B','Incineram Noct','Rare',['Dark']],
+    ['092','Dazzi','Common',['Electric']], ['092B','Dazzi Noct','Common',['Dark','Electric']], ['093','Pyrin','Rare',['Fire']],
+    ['093B','Pyrin Noct','Rare',['Dark','Fire']], ['094','Relaxaurus','Epic',['Dragon','Water']], ['094B','Relaxaurus Lux','Epic',['Dragon','Electric']],
+    ['095','Foxcicle','Rare',['Ice']], ['096','Beakon','Rare',['Electric']], ['096B','Beakon Cryst','Rare',[]],
+    ['097','Ghangler','Rare',['Dark','Water']], ['097B','Ghangler Ignis','Rare',['Fire','Water']], ['098','Rayhound','Rare',['Electric']],
+    ['098B','Rayhound Cryst','Rare',[]], ['099','Menasting','Epic',['Dark','Ground']], ['099B','Menasting Terra','Epic',['Ground']],
+    ['100','Needoll','Common',[]], ['100B','Needoll Noct','Common',[]], ['101','Reindrix','Common',['Ice']],
+    ['102','Mossanda','Rare',['Grass']], ['102B','Mossanda Lux','Rare',['Electric']], ['103','Chillet','Common',['Dragon','Ice']],
+    ['103B','Chillet Ignis','Rare',['Dragon','Fire']], ['104','Ragnahawk','Rare',['Fire']], ['105','Moldron','Rare',[]],
+    ['105B','Moldron Cryst','Epic',[]], ['106','Palumba','Rare',['Grass']], ['107','Digtoise','Rare',['Ground']],
+    ['108','Broncherry','Epic',['Grass']], ['108B','Broncherry Aqua','Epic',['Grass','Water']], ['109','Dumud','Common',['Ground','Water']],
+    ['109B','Dumud Gild','Rare',['Ground','Water']], ['110','Braloha','Epic',['Grass','Ground']], ['111','Kitsun','Rare',['Fire']],
+    ['111B','Kitsun Noct','Rare',['Dark']], ['112','Blazehowl','Rare',['Fire']], ['112B','Blazehowl Noct','Epic',['Dark','Fire']],
+    ['113','Warsect','Epic',['Grass','Ground']], ['113B','Warsect Terra','Epic',['Ground']], ['114','Frostplume','Common',['Ice']],
+    ['115','Majex','Rare',[]], ['116','Sibelyx','Rare',['Ice']], ['116B','Sibelyx Primo','Epic',[]],
+    ['117','Maraith','Rare',['Dark']], ['118','Shroomer','Common',['Grass']], ['118B','Shroomer Noct','Rare',['Dark','Grass']],
+    ['119','Icelyn','Common',['Ice']], ['120','Gildra','Rare',[]], ['121','Jormuntide','Epic',['Dragon','Water']],
+    ['121B','Jormuntide Ignis','Epic',['Dragon','Fire']], ['122','Suzaku','Epic',['Fire']], ['122B','Suzaku Aqua','Epic',['Water']],
+    ['123','Dazemu','Rare',['Ground']], ['124','Quivern','Rare',['Dragon']], ['124B','Quivern Botan','Epic',['Dragon','Grass']],
+    ['125','Lullu','Common',['Grass']], ['126','Kikit','Common',['Ground']], ['127','Yakumo','Common',['Neutral']],
+    ['128','Skutlass','Rare',[]], ['128B','Skutlass Ignis','Rare',[]], ['129','Reptyro','Rare',['Fire','Ground']],
+    ['129B','Reptyro Cryst','Rare',['Ground','Ice']], ['130','Starryon','Rare',['Dark']], ['130B','Starryon Primo','Epic',[]],
+    ['131','Pierdon','Rare',[]], ['131B','Pierdon Cryst','Rare',[]], ['132','Cryolinx','Rare',['Ice']],
+    ['132B','Cryolinx Terra','Rare',['Ground']], ['133','Snugloo','Common',[]], ['134','Wumpo','Rare',['Ice']],
+    ['134B','Wumpo Botan','Epic',['Grass']], ['135','Sootseer','Rare',['Dark','Fire']], ['136','Carnibora','Rare',[]],
+    ['137','Blazamut','Epic',['Fire']], ['137B','Blazamut Ryu','Epic',['Dragon','Fire']], ['138','Dualith','Epic',[]],
+    ['138B','Dualith Noct','Epic',[]], ['139','Anubis','Epic',['Ground']], ['140','Sekhmet','Rare',[]],
+    ['141','Prixter','Rare',['Dark','Ground']], ['141B','Prixter Lux','Rare',[]], ['142','Tetroise','Epic',[]],
+    ['142B','Tetroise Primo','Epic',[]], ['143','Nyafia','Common',['Dark']], ['144','Mimog','Rare',['Neutral']],
+    ['145','Xenovader','Rare',['Dark']], ['146','Xenogard','Epic',['Dragon']], ['147','Prunelia','Rare',['Dark','Grass']],
+    ['148','Nitemary','Rare',['Dark']], ['148B','Nitemary Botan','Rare',[]], ['149','Smokie','Common',['Dark']],
+    ['149B','Smokie Cryst','Common',[]], ['150','Omascul','Common',['Dark']], ['151','Whalaska','Epic',['Ice','Water']],
+    ['151B','Whalaska Ignis','Epic',['Fire','Ice']], ['152','Verdash','Epic',['Grass']], ['153','Splatterina','Common',['Dark']],
+    ['154','Gildane','Epic',['Ground']], ['155','Dogen','Rare',['Neutral']], ['156','Bulldosu','Common',[]],
+    ['157','Celesdir','Rare',['Neutral']], ['157B','Celesdir Noct','Rare',[]], ['158','Astegon','Epic',['Dark','Dragon']],
+    ['159','Knocklem','Epic',['Ground']], ['159B','Knocklem Ignis','Epic',[]], ['160','Silvegis','Epic',['Dragon']],
+    ['161','Azurmane','Rare',['Electric']], ['162','Valentail','Common',[]], ['163','Snock','Common',[]],
+    ['163B','Snock Lux','Common',[]], ['164','Souffline','Common',[]], ['165','Lapiron','Common',[]],
+    ['166','Hoodle','Common',[]], ['167','Slowatt','Common',[]], ['168','Bakemi','Common',[]],
+    ['169','Solmora','Common',[]], ['169B','Solmora Lux','Rare',[]], ['170','Lapure','Common',[]],
+    ['171','Eidrolon','Rare',[]], ['171B','Eidrolon Ignis','Epic',[]], ['172','Dynamoff','Rare',[]],
+    ['173','Tropicaw','Rare',[]], ['174','Flaracle','Rare',['Fire']], ['175','Ophydia','Epic',['Grass','Water']],
+    ['176','Dupin','Rare',[]], ['177','Roujay','Rare',[]], ['178','Venusa','Rare',[]],
+    ['179','Mycora','Rare',[]], ['180','Loomen','Rare',[]], ['181','Wistella','Common',[]],
+    ['182','Solenne','Rare',[]], ['183','Renjishi','Rare',[]], ['184','Aegidron','Epic',[]],
+    ['185','Grizzbolt','Epic',['Electric']], ['186','Lyleen','Epic',['Grass']], ['186B','Lyleen Noct','Epic',['Dark']],
+    ['187','Orserk','Epic',['Dragon','Electric']], ['188','Faleris','Epic',['Fire']], ['188B','Faleris Aqua','Epic',['Water']],
+    ['189','Shadowbeak','Epic',['Dark']], ['190','Selyne','Epic',['Dark','Neutral']], ['191','Bastigor','Epic',['Ice']],
+    ['192','Shaolong','Epic',[]], ['193','Silvance','Epic',[]], ['194','Dandilord','Epic',[]],
+    ['195','Bellanoir','Legendary',['Dark']], ['195B','Bellanoir Libero','Legendary',['Dark']], ['196','Xenolord','Epic',['Dark','Dragon']],
+    ['197','Hartalis','Epic',['Neutral']], ['198','Paladius','Legendary',['Neutral']], ['199','Necromus','Legendary',['Dark']],
+    ['200','Frostallion','Legendary',['Ice']], ['200B','Frostallion Noct','Legendary',['Dark']], ['201','Neptilius','Legendary',['Water']],
+    ['202','Jetragon','Legendary',['Dragon']], ['203','Panthalus','Epic',['Water']], ['204','Astralym','Epic',[]],
+    ['EVT','Eye of Cthulhu','Rare',[],true], ['EVT','Demon Eye','Common',[],true], ['EVT','Green Slime','Common',[],true],
+    ['EVT','Blue Slime','Common',[],true], ['EVT','Illuminant Slime','Common',[],true], ['EVT','Purple Slime','Common',[],true],
+    ['EVT','Rainbow Slime','Common',[],true], ['EVT','Red Slime','Common',[],true], ['EVT','Enchanted Sword','Common',[],true],
+    ['EVT','Cave Bat','Common',[],true], ['EVT','Illuminant Bat','Common',[],true]
+  ].map(([num,name,rarity,elements,event])=> ({ id: uidStatic(), num, name, rarity, elements: elements||[], event: !!event }));
+
+  function uidStatic(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+
+  const norm = s => (s || '').trim();
+  const key = s => norm(s).toLowerCase();
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+  function showToast(msg){
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._h);
+    showToast._h = setTimeout(()=> t.classList.remove('show'), 2600);
+  }
+
+  async function loadCombos(){
+    // no-op placeholder kept for structural parity; real loading happens in loadRemoteData()
+  }
+
+  async function persist(){
+    await pushToOneDrive();
+  }
+
+  async function loadPalpedia(){
+    // handled by loadRemoteData()
+  }
+
+  async function persistPalpedia(){
+    await pushToOneDrive();
+  }
+
+  /* ---------------- Sync status UI ---------------- */
+  function setSyncPill(state, text){
+    const pill = $('#syncPill');
+    pill.className = 'sync-pill' + (state ? ' ' + state : '');
+    $('#syncPillText').textContent = text;
+  }
+
+  function setOfflineBanner(show){
+    $('#offlineBanner').classList.toggle('show', show);
+  }
+
+  /* ---------------- Local cache (for offline viewing) ---------------- */
+  function readLocalCache(){
+    try{
+      const raw = localStorage.getItem(LOCAL_CACHE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    }catch(e){ return null; }
+  }
+
+  function writeLocalCache(data){
+    try{ localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(data)); }catch(e){ /* storage full or disabled — non-fatal */ }
+  }
+
+  /* ---------------- Auth ---------------- */
+  async function initAuth(){
+    if(!msalInstance){
+      $('#authGate').style.display = 'flex';
+      showAuthError('Could not load the Microsoft sign-in library — check your internet connection and reload.');
+      return;
+    }
+    let redirectResult = null;
+    try{
+      redirectResult = await msalInstance.handleRedirectPromise();
+    }catch(e){
+      showAuthError('Sign-in failed: ' + (e && e.message ? e.message : 'unknown error'));
+    }
+    const accounts = msalInstance.getAllAccounts();
+    account = redirectResult?.account || (accounts.length ? accounts[0] : null);
+
+    if(account){
+      msalInstance.setActiveAccount(account);
+      $('#authGate').style.display = 'none';
+      $('#acctEmail').textContent = 'Signed in as ' + (account.username || account.name || 'your Microsoft account');
+      await startApp();
+    } else {
+      $('#authGate').style.display = 'flex';
+    }
+  }
+
+  function showAuthError(msg){
+    const el = $('#authError');
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+
+  async function signIn(){
+    if(!msalInstance){
+      showAuthError('The Microsoft sign-in library did not load — check your connection and reload the page.');
+      return;
+    }
+    if(!CONFIG.clientId || CONFIG.clientId.startsWith('PASTE_')){
+      showAuthError('This app has not been configured yet — set CONFIG.clientId in index.html to your Azure app registration\'s Client ID. See README.md.');
+      return;
+    }
+    try{
+      await msalInstance.loginRedirect({ scopes: CONFIG.scopes });
+    }catch(e){
+      showAuthError('Sign-in failed: ' + (e && e.message ? e.message : 'unknown error'));
+    }
+  }
+
+  async function signOut(){
+    try{
+      await msalInstance.logoutRedirect();
+    }catch(e){
+      showToast('Sign-out failed.');
+    }
+  }
+
+  async function getAccessToken(){
+    if(!account) throw new Error('not-signed-in');
+    try{
+      const result = await msalInstance.acquireTokenSilent({ scopes: CONFIG.scopes, account });
+      return result.accessToken;
+    }catch(e){
+      if(e instanceof msal.InteractionRequiredAuthError){
+        const result = await msalInstance.acquireTokenPopup({ scopes: CONFIG.scopes });
+        return result.accessToken;
+      }
+      throw e;
+    }
+  }
+
+  /* ---------------- OneDrive Graph calls ---------------- */
+  const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
+
+  async function fetchFromOneDrive(){
+    const token = await getAccessToken();
+    const url = `${GRAPH_BASE}/me/drive/special/approot:/${encodeURIComponent(CONFIG.dataFileName)}:/content`;
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if(res.status === 404) return null; // file doesn't exist yet — first run
+    if(!res.ok) throw new Error('graph-read-failed:' + res.status);
+    return await res.json();
+  }
+
+  async function saveToOneDrive(data){
+    const token = await getAccessToken();
+    const url = `${GRAPH_BASE}/me/drive/special/approot:/${encodeURIComponent(CONFIG.dataFileName)}:/content`;
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if(!res.ok) throw new Error('graph-write-failed:' + res.status);
+  }
+
+  async function loadRemoteData(){
+    const cached = readLocalCache();
+    if(cached){
+      combos = cached.combos || [];
+      palpedia = cached.palpedia || PALPEDIA_SEED;
+      ready = true; pdxReady = true;
+      renderAll();
+    }
+
+    if(!navigator.onLine){
+      isOnline = false;
+      setSyncPill('offline', 'Offline');
+      setOfflineBanner(true);
+      if(!cached){
+        combos = []; palpedia = PALPEDIA_SEED; ready = true; pdxReady = true; renderAll();
+      }
+      return;
+    }
+
+    setSyncPill('syncing', 'Syncing…');
+    try{
+      const remote = await fetchFromOneDrive();
+      const data = remote || { combos: [], palpedia: PALPEDIA_SEED };
+      combos = data.combos || [];
+      palpedia = (data.palpedia && data.palpedia.length) ? data.palpedia : PALPEDIA_SEED;
+      ready = true; pdxReady = true;
+      writeLocalCache({ combos, palpedia });
+      renderAll();
+      isOnline = true;
+      setSyncPill('synced', 'Synced');
+      setOfflineBanner(false);
+      if(!remote) await pushToOneDrive(); // first run — seed the file
+    }catch(e){
+      isOnline = false;
+      setSyncPill('offline', cached ? 'Offline — cached copy' : 'Connection error');
+      setOfflineBanner(true);
+      if(!cached){
+        combos = []; palpedia = PALPEDIA_SEED; ready = true; pdxReady = true; renderAll();
+      }
+    }
+  }
+
+  async function pushToOneDrive(){
+    writeLocalCache({ combos, palpedia });
+    if(!navigator.onLine){
+      isOnline = false;
+      setSyncPill('offline', 'Offline — not saved');
+      setOfflineBanner(true);
+      showToast("You're offline — this won't save until you reconnect.");
+      return false;
+    }
+    setSyncPill('syncing', 'Saving…');
+    try{
+      await saveToOneDrive({ combos, palpedia });
+      setSyncPill('synced', 'Synced');
+      setOfflineBanner(false);
+      return true;
+    }catch(e){
+      isOnline = false;
+      setSyncPill('offline', 'Save failed');
+      setOfflineBanner(true);
+      showToast('Could not reach OneDrive — your change is only saved on this device for now.');
+      return false;
+    }
+  }
+
+  window.addEventListener('online', ()=>{ isOnline = true; loadRemoteData(); });
+  window.addEventListener('offline', ()=>{
+    isOnline = false;
+    setSyncPill('offline', 'Offline');
+    setOfflineBanner(true);
+  });
+
+  async function startApp(){
+    if(hasLoadedOnce) return;
+    hasLoadedOnce = true;
+    await loadRemoteData();
+  }
+
+  function allPalNames(){
+    const set = new Set();
+    combos.forEach(c=>{ [c.parent1, c.parent2, c.child].forEach(n=> n && set.add(norm(n))); });
+    palpedia.forEach(p=> set.add(norm(p.name)));
+    return Array.from(set).sort((a,b)=> a.localeCompare(b));
+  }
+
+  function palByName(name){
+    return palpedia.find(p=> key(p.name) === key(name));
+  }
+
+  /* ---------------- Autocomplete ---------------- */
+  function attachAutocomplete(input, onPick){
+    const wrap = input.closest('.ac-wrap');
+    if(!wrap) return;
+    const list = document.createElement('div');
+    list.className = 'ac-list';
+    wrap.appendChild(list);
+    let activeIndex = -1;
+    let items = [];
+
+    function close(){ list.classList.remove('open'); list.innerHTML = ''; activeIndex = -1; items = []; }
+
+    function open(query){
+      const q = key(query);
+      const names = allPalNames();
+      items = q ? names.filter(n=> key(n).includes(q)).slice(0, 8) : names.slice(0, 8);
+      if(items.length === 0){ close(); return; }
+      list.innerHTML = '';
+      items.forEach((name, i)=>{
+        const p = palByName(name);
+        const row = document.createElement('div');
+        row.className = 'ac-item';
+        const label = document.createElement('span'); label.textContent = name;
+        row.appendChild(label);
+        if(p && p.num){ const num = document.createElement('span'); num.className='ac-num'; num.textContent = '#'+p.num; row.appendChild(num); }
+        row.addEventListener('mousedown', e=>{ e.preventDefault(); pick(name); });
+        list.appendChild(row);
+      });
+      activeIndex = -1;
+      list.classList.add('open');
+    }
+
+    function pick(name){
+      input.value = name;
+      close();
+      if(onPick) onPick(name);
+      input.dispatchEvent(new Event('input', {bubbles:true}));
+    }
+
+    function highlight(){
+      Array.from(list.children).forEach((el,i)=> el.classList.toggle('active', i===activeIndex));
+      const el = list.children[activeIndex];
+      if(el) el.scrollIntoView({block:'nearest'});
+    }
+
+    input.addEventListener('input', ()=> open(input.value));
+    input.addEventListener('focus', ()=> open(input.value));
+    input.addEventListener('keydown', e=>{
+      if(!list.classList.contains('open')) return;
+      if(e.key === 'ArrowDown'){ e.preventDefault(); activeIndex = Math.min(activeIndex+1, items.length-1); highlight(); }
+      else if(e.key === 'ArrowUp'){ e.preventDefault(); activeIndex = Math.max(activeIndex-1, 0); highlight(); }
+      else if(e.key === 'Enter'){ if(activeIndex >= 0){ e.preventDefault(); pick(items[activeIndex]); } else { close(); } }
+      else if(e.key === 'Escape'){ close(); }
+    });
+    document.addEventListener('click', e=>{ if(!wrap.contains(e.target)) close(); });
+  }
+
+  function refreshDatalist(){
+    const dl = $('#palNames');
+    dl.innerHTML = allPalNames().map(n=> `<option value="${escapeHtml(n)}">`).join('');
+  }
+
+  function escapeHtml(s){
+    return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function colorClassFor(name){
+    let h = 0;
+    for(const ch of key(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return 'c' + (h % 5);
+  }
+
+  function palBadge(name){
+    const span = document.createElement('span');
+    span.className = 'pal-badge ' + colorClassFor(name);
+    span.textContent = name;
+    return span;
+  }
+
+  /* ---------------- Stats ---------------- */
+  function renderStats(){
+    $('#statCombos').textContent = combos.length;
+    $('#statPals').textContent = allPalNames().length;
+  }
+
+  /* ---------------- Ledger ---------------- */
+  function getFilteredCombos(){
+    const a = key($('#filterParentA').value);
+    const both = $('#bothParents').checked;
+    const b = key($('#filterParentB').value);
+    const c = key($('#filterChild').value);
+    const eggType = $('#filterEggType').value;
+
+    return combos.filter(combo=>{
+      const p1 = key(combo.parent1), p2 = key(combo.parent2), ch = key(combo.child);
+      if(c && !ch.includes(c)) return false;
+      if(a && !(p1.includes(a) || p2.includes(a))) return false;
+      if(both && b && !(p1.includes(b) || p2.includes(b))) return false;
+      if(eggType && combo.eggType !== eggType) return false;
+      return true;
+    });
+  }
+
+  function renderComboList(){
+    const list = $('#comboList');
+    const filtered = getFilteredCombos();
+
+    if(combos.length === 0){
+      list.innerHTML = `<div class="empty-state"><b>No combos logged yet</b>Add the breeding combinations you've actually confirmed — this ledger is only ever as accurate as what you put in.</div>`;
+      return;
+    }
+    if(filtered.length === 0){
+      list.innerHTML = `<div class="empty-state"><b>No matches</b>Try loosening your filters.</div>`;
+      return;
+    }
+
+    list.innerHTML = '';
+    filtered
+      .slice()
+      .sort((x,y)=> key(x.child).localeCompare(key(y.child)))
+      .forEach(combo=>{
+        const card = document.createElement('div');
+        card.className = 'combo-card';
+
+        const flow = document.createElement('div');
+        flow.className = 'combo-flow';
+        flow.appendChild(palBadge(combo.parent1));
+        const plus = document.createElement('span'); plus.className='plus'; plus.textContent='+';
+        flow.appendChild(plus);
+        flow.appendChild(palBadge(combo.parent2));
+        const arrow = document.createElement('span'); arrow.className='arrow'; arrow.textContent='→';
+        flow.appendChild(arrow);
+        flow.appendChild(palBadge(combo.child));
+        card.appendChild(flow);
+
+        if(combo.eggType){
+          const tag = document.createElement('span');
+          tag.className = 'egg-tag';
+          tag.textContent = '🥚 ' + combo.eggType;
+          flow.appendChild(tag);
+        }
+
+        if(combo.notes){
+          const notes = document.createElement('div');
+          notes.className = 'combo-notes';
+          notes.textContent = combo.notes;
+          card.appendChild(notes);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'combo-actions';
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-ghost icon-btn'; editBtn.title='Edit'; editBtn.textContent = '✎';
+        editBtn.onclick = ()=> openEdit(combo.id);
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-ghost icon-btn'; delBtn.title='Delete'; delBtn.textContent = '✕';
+        delBtn.onclick = ()=> removeCombo(combo.id);
+        actions.appendChild(editBtn); actions.appendChild(delBtn);
+        card.appendChild(actions);
+
+        list.appendChild(card);
+      });
+  }
+
+  function openAdd(){
+    editingId = null;
+    $('#formTitle').textContent = 'Log a new combo';
+    $('#fParent1').value = ''; $('#fParent2').value = ''; $('#fChild').value = ''; $('#fNotes').value = '';
+    $('#fEggType').value = '';
+    $('#addForm').classList.add('open');
+    $('#fParent1').focus();
+  }
+
+  function openEdit(id){
+    const combo = combos.find(c=> c.id === id);
+    if(!combo) return;
+    editingId = id;
+    $('#formTitle').textContent = 'Edit combo';
+    $('#fParent1').value = combo.parent1;
+    $('#fParent2').value = combo.parent2;
+    $('#fChild').value = combo.child;
+    $('#fEggType').value = combo.eggType || '';
+    $('#fNotes').value = combo.notes || '';
+    $('#addForm').classList.add('open');
+    $('#fParent1').focus();
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  function closeForm(){
+    $('#addForm').classList.remove('open');
+    editingId = null;
+  }
+
+  async function saveCombo(){
+    const parent1 = norm($('#fParent1').value);
+    const parent2 = norm($('#fParent2').value);
+    const child = norm($('#fChild').value);
+    const notes = norm($('#fNotes').value);
+    const eggType = $('#fEggType').value;
+
+    if(!parent1 || !parent2 || !child){
+      showToast('Parent 1, Parent 2, and Child are all required.');
+      return;
+    }
+
+    if(editingId){
+      const combo = combos.find(c=> c.id === editingId);
+      if(combo){ combo.parent1=parent1; combo.parent2=parent2; combo.child=child; combo.notes=notes; combo.eggType=eggType; }
+      showToast('Combo updated.');
+    } else {
+      combos.push({ id: uid(), parent1, parent2, child, notes, eggType });
+      showToast('Combo logged.');
+    }
+    await persist();
+    closeForm();
+    renderAll();
+  }
+
+  async function removeCombo(id){
+    if(!confirm('Delete this combo?')) return;
+    combos = combos.filter(c=> c.id !== id);
+    await persist();
+    renderAll();
+    showToast('Combo deleted.');
+  }
+
+  /* ---------------- Path Finder ---------------- */
+  function recipesFor(name){
+    return combos.filter(c=> key(c.child) === key(name));
+  }
+
+  function buildTreeNode(name, ancestors, isRoot){
+    const recipes = recipesFor(name);
+    const isCycle = ancestors.some(a=> key(a) === key(name));
+
+    if(recipes.length === 0 || isCycle){
+      const wrap = document.createElement('div');
+      wrap.className = 'tree-node leaf';
+      wrap.appendChild(palBadge(name));
+      const note = document.createElement('span');
+      note.className = 'leaf-note';
+      note.textContent = isCycle ? 'already breeding above ↑' : 'no recipe logged — catch or obtain directly';
+      wrap.appendChild(note);
+      return wrap;
+    }
+
+    const details = document.createElement('details');
+    details.className = 'tree-node has-recipes';
+    if(isRoot) details.open = true;
+
+    const summary = document.createElement('summary');
+    summary.appendChild(palBadge(name));
+    details.appendChild(summary);
+
+    const list = document.createElement('div');
+    list.className = 'recipe-list';
+
+    recipes.forEach((r, i)=>{
+      const row = document.createElement('div');
+      row.className = 'recipe-row';
+      if(recipes.length > 1 || r.eggType){
+        const tag = document.createElement('span');
+        tag.className = 'recipe-tag';
+        const parts = [];
+        if(recipes.length > 1) parts.push(`Option ${i+1} of ${recipes.length}`);
+        if(r.eggType) parts.push('🥚 ' + r.eggType);
+        tag.textContent = parts.join('  —  ');
+        row.appendChild(tag);
+      }
+      row.appendChild(buildTreeNode(r.parent1, [...ancestors, name], false));
+      const plus = document.createElement('span'); plus.className='plus'; plus.textContent='+';
+      row.appendChild(plus);
+      row.appendChild(buildTreeNode(r.parent2, [...ancestors, name], false));
+      list.appendChild(row);
+    });
+
+    details.appendChild(list);
+    return details;
+  }
+
+  function renderPathFinder(){
+    const target = norm($('#pfInput').value);
+    const container = $('#pfResults');
+    container.innerHTML = '';
+    if(!target){
+      container.innerHTML = '<div class="pf-empty">Enter a target Pal above to see every recorded route to it — including chains through Pals you\'d need to breed first.</div>';
+      return;
+    }
+    const recipes = recipesFor(target);
+    if(recipes.length === 0){
+      const div = document.createElement('div');
+      div.className = 'pf-empty';
+      div.innerHTML = `No recorded recipe produces <b>${escapeHtml(target)}</b> yet.`;
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary btn-sm pf-cta';
+      btn.textContent = `Log a combo for ${target}`;
+      btn.onclick = ()=>{
+        document.querySelector('.tab-btn[data-tab="ledger"]').click();
+        openAdd();
+        $('#fChild').value = target;
+      };
+      container.appendChild(div);
+      container.appendChild(btn);
+      return;
+    }
+    container.appendChild(buildTreeNode(target, [], true));
+  }
+
+  /* ---------------- Palpedia ---------------- */
+  function rarityClass(r){
+    const k = (r||'Unknown').toLowerCase();
+    return 'rarity-' + (['common','rare','epic','legendary'].includes(k) ? k : 'unknown');
+  }
+
+  function getFilteredPalpedia(){
+    const q = key($('#pdxSearch').value);
+    const rarity = $('#pdxRarity').value;
+    const element = $('#pdxElement').value;
+    return palpedia.filter(p=>{
+      if(q && !(key(p.name).includes(q) || key(p.num||'').includes(q))) return false;
+      if(rarity && (p.rarity||'Unknown') !== rarity) return false;
+      if(element && !(p.elements||[]).includes(element)) return false;
+      return true;
+    });
+  }
+
+  function renderPalpedia(){
+    if(!pdxReady) return;
+    const table = $('#pdxTable');
+    const filtered = getFilteredPalpedia();
+    if(filtered.length === 0){
+      table.innerHTML = `<div class="empty-state"><b>No matches</b>Try loosening your search or filters.</div>`;
+      return;
+    }
+    table.innerHTML = '';
+    filtered
+      .slice()
+      .sort((a,b)=> (a.num||'zzz').localeCompare(b.num||'zzz', undefined, {numeric:true}))
+      .forEach(p=>{
+        const row = document.createElement('div');
+        row.className = 'pdx-row';
+
+        const num = document.createElement('span'); num.className = 'pdx-num'; num.textContent = p.num ? '#'+p.num : '—';
+        row.appendChild(num);
+
+        const name = document.createElement('span'); name.className = 'pdx-name'; name.textContent = p.name;
+        row.appendChild(name);
+
+        const rarity = document.createElement('span');
+        rarity.className = 'rarity-chip ' + rarityClass(p.rarity);
+        rarity.textContent = p.rarity || 'Unknown';
+        row.appendChild(rarity);
+
+        if(p.event){ const ev = document.createElement('span'); ev.className='event-chip'; ev.textContent='Event / Crossover'; row.appendChild(ev); }
+
+        const els = document.createElement('span'); els.className = 'pdx-elements';
+        if(p.elements && p.elements.length){
+          p.elements.forEach(e=>{ const b = palBadge(e); b.style.fontSize='11px'; b.style.padding='4px 9px'; els.appendChild(b); });
+        } else {
+          const empty = document.createElement('span'); empty.className='pdx-empty-tag'; empty.textContent='element unknown';
+          els.appendChild(empty);
+        }
+        row.appendChild(els);
+
+        row.appendChild(Object.assign(document.createElement('span'), {className:'pdx-spacer'}));
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-ghost icon-btn'; editBtn.title='Edit'; editBtn.textContent = '✎';
+        editBtn.onclick = ()=> openPdxEdit(p.id);
+        row.appendChild(editBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-ghost icon-btn'; delBtn.title='Delete'; delBtn.textContent = '✕';
+        delBtn.onclick = ()=> removePdx(p.id);
+        row.appendChild(delBtn);
+
+        table.appendChild(row);
+      });
+  }
+
+  function openPdxAdd(){
+    pdxEditingId = null;
+    $('#pdxFormTitle').textContent = 'Add a Pal';
+    $('#pdxName').value=''; $('#pdxNum').value=''; $('#pdxRarityInput').value='Unknown'; $('#pdxElements').value='';
+    $('#pdxForm').classList.add('open');
+    $('#pdxName').focus();
+  }
+
+  function openPdxEdit(id){
+    const p = palpedia.find(x=> x.id === id);
+    if(!p) return;
+    pdxEditingId = id;
+    $('#pdxFormTitle').textContent = 'Edit ' + p.name;
+    $('#pdxName').value = p.name;
+    $('#pdxNum').value = p.num && p.num !== 'EVT' ? p.num : '';
+    $('#pdxRarityInput').value = p.rarity || 'Unknown';
+    $('#pdxElements').value = (p.elements||[]).join(', ');
+    $('#pdxForm').classList.add('open');
+    $('#pdxName').focus();
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  function closePdxForm(){ $('#pdxForm').classList.remove('open'); pdxEditingId = null; }
+
+  async function savePdx(){
+    const name = norm($('#pdxName').value);
+    if(!name){ showToast('Name is required.'); return; }
+    const num = norm($('#pdxNum').value);
+    const rarity = $('#pdxRarityInput').value;
+    const elements = norm($('#pdxElements').value).split(',').map(s=> norm(s)).filter(Boolean);
+
+    if(pdxEditingId){
+      const p = palpedia.find(x=> x.id === pdxEditingId);
+      if(p){ p.name=name; p.num=num||p.num; p.rarity=rarity; p.elements=elements; }
+      showToast('Palpedia entry updated.');
+    } else {
+      palpedia.push({ id: uid(), num: num || '', name, rarity, elements, event:false });
+      showToast('Pal added to Palpedia.');
+    }
+    await persistPalpedia();
+    closePdxForm();
+    renderAll();
+  }
+
+  async function removePdx(id){
+    if(!confirm('Remove this Pal from the Palpedia?')) return;
+    palpedia = palpedia.filter(p=> p.id !== id);
+    await persistPalpedia();
+    renderAll();
+    showToast('Removed.');
+  }
+  function renderAll(){
+    if(!ready) return;
+    refreshDatalist();
+    renderStats();
+    renderComboList();
+    renderPathFinder();
+    renderPalpedia();
+  }
+
+  /* ---------------- Backup / settings ---------------- */
+  async function exportBackup(){
+    const json = JSON.stringify(combos, null, 2);
+    $('#backupArea').value = json;
+    try{
+      await navigator.clipboard.writeText(json);
+      showToast('Backup copied to clipboard.');
+    }catch(e){
+      showToast('Backup shown below — copy it manually.');
+    }
+  }
+
+  async function importBackup(){
+    const raw = $('#backupArea').value.trim();
+    if(!raw){ showToast('Paste backup JSON first.'); return; }
+    let parsed;
+    try{ parsed = JSON.parse(raw); }catch(e){ showToast('That doesn\'t look like valid JSON.'); return; }
+    if(!Array.isArray(parsed)){ showToast('Backup must be a list of combos.'); return; }
+    if(!confirm('This replaces your current ledger with the pasted backup. Continue?')) return;
+    combos = parsed.filter(c=> c && c.parent1 && c.parent2 && c.child).map(c=> ({
+      id: c.id || uid(), parent1: norm(c.parent1), parent2: norm(c.parent2), child: norm(c.child), notes: norm(c.notes||'')
+    }));
+    await persist();
+    renderAll();
+    showToast('Ledger restored.');
+  }
+
+  async function resetAll(){
+    if(!confirm('Erase every combo you\'ve logged? This can\'t be undone.')) return;
+    combos = [];
+    await persist();
+    renderAll();
+    showToast('Ledger cleared.');
+  }
+
+  /* ---------------- Wiring ---------------- */
+  $$('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      $$('.tab-btn').forEach(b=> b.classList.remove('active'));
+      $$('.panel').forEach(p=> p.classList.remove('active'));
+      btn.classList.add('active');
+      $('#panel-' + btn.dataset.tab).classList.add('active');
+      if(btn.dataset.tab === 'pathfinder') renderPathFinder();
+    });
+  });
+
+  $('#openAddForm').addEventListener('click', openAdd);
+  $('#cancelForm').addEventListener('click', closeForm);
+  $('#saveCombo').addEventListener('click', saveCombo);
+
+  $('#bothParents').addEventListener('change', e=>{
+    $('#parentBField').style.display = e.target.checked ? 'flex' : 'none';
+    renderComboList();
+  });
+  ['filterParentA','filterParentB','filterChild'].forEach(id=>{
+    $('#'+id).addEventListener('input', renderComboList);
+  });
+  $('#filterEggType').addEventListener('change', renderComboList);
+  $('#clearFilters').addEventListener('click', ()=>{
+    $('#filterParentA').value=''; $('#filterParentB').value=''; $('#filterChild').value='';
+    $('#filterEggType').value='';
+    $('#bothParents').checked=false; $('#parentBField').style.display='none';
+    renderComboList();
+  });
+
+  $('#pfGo').addEventListener('click', renderPathFinder);
+  $('#pfInput').addEventListener('keydown', e=>{ if(e.key==='Enter') renderPathFinder(); });
+
+  $('#pdxSearch').addEventListener('input', renderPalpedia);
+  $('#pdxRarity').addEventListener('change', renderPalpedia);
+  $('#pdxElement').addEventListener('change', renderPalpedia);
+  $('#pdxClear').addEventListener('click', ()=>{
+    $('#pdxSearch').value=''; $('#pdxRarity').value=''; $('#pdxElement').value='';
+    renderPalpedia();
+  });
+  $('#pdxAddNew').addEventListener('click', openPdxAdd);
+  $('#pdxCancel').addEventListener('click', closePdxForm);
+  $('#pdxSave').addEventListener('click', savePdx);
+
+  attachAutocomplete($('#fParent1'));
+  attachAutocomplete($('#fParent2'));
+  attachAutocomplete($('#fChild'));
+  attachAutocomplete($('#filterParentA'), renderComboList);
+  attachAutocomplete($('#filterParentB'), renderComboList);
+  attachAutocomplete($('#filterChild'), renderComboList);
+  attachAutocomplete($('#pfInput'), renderPathFinder);
+
+  $('#settingsToggle').addEventListener('click', ()=> $('#settingsPop').classList.toggle('open'));
+  document.addEventListener('click', e=>{
+    const pop = $('#settingsPop');
+    if(pop.classList.contains('open') && !pop.contains(e.target) && e.target !== $('#settingsToggle')){
+      pop.classList.remove('open');
+    }
+  });
+  $('#exportBtn').addEventListener('click', exportBackup);
+  $('#importBtn').addEventListener('click', importBackup);
+  $('#resetBtn').addEventListener('click', resetAll);
+
+  $('#signInBtn').addEventListener('click', signIn);
+  $('#signOutBtn').addEventListener('click', signOut);
+  $('#syncNowBtn').addEventListener('click', ()=>{ $('#settingsPop').classList.remove('open'); loadRemoteData(); });
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('sw.js').catch(()=>{ /* offline shell caching is a nice-to-have, not required */ });
+    });
+  }
+
+  initAuth();
+})();
+</script>
+</body>
+</html>
