@@ -1079,6 +1079,17 @@
       return;
     }
 
+    const pairKey = [key(parent1), key(parent2)].sort().join('+');
+    const duplicate = combos.find(c=>{
+      if(editingId && c.id === editingId) return false; // don't flag the entry against itself while editing
+      const existingPairKey = [key(c.parent1), key(c.parent2)].sort().join('+');
+      return existingPairKey === pairKey && key(c.child) === key(child);
+    });
+    if(duplicate){
+      showToast(`Already logged: ${duplicate.parent1} + ${duplicate.parent2} → ${duplicate.child}`);
+      return;
+    }
+
     if(editingId){
       const combo = combos.find(c=> c.id === editingId);
       if(combo){ combo.parent1=parent1; combo.parent2=parent2; combo.child=child; combo.notes=notes; combo.eggType=eggType; }

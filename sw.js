@@ -2,7 +2,7 @@
 // Your actual data (combos/Palpedia) is never cached here — that's handled
 // separately by the app itself via localStorage, and always tries OneDrive first.
 
-const CACHE_NAME = 'pal-breeding-ledger-shell-v1';
+const CACHE_NAME = 'pal-breeding-ledger-shell-v2';
 const SHELL_FILES = [
   './',
   './index.html',
