@@ -1,7 +1,7 @@
 {
   "name": "Pal Breeding Ledger",
   "short_name": "Breeding Ledger",
-  "description": "Track your Palworld breeding combos, synced through your own OneDrive.",
+  "description": "Track your Palworld breeding combos, synced across your devices.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
