@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Breeding Ledger</title>
 <meta name="theme-color" content="#16241C">
-<meta name="description" content="Track your Palworld breeding combos, synced through your own OneDrive.">
+<meta name="description" content="Track your Palworld breeding combos, synced across your devices.">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --bg:#16241C;
@@ -277,10 +277,14 @@
 <div id="authGate" class="auth-gate">
   <div class="auth-card">
     <span class="egg-dot"></span>
-    <h2>Connect your OneDrive</h2>
-    <p>Your breeding combos and Palpedia live in a private app folder in your OneDrive, so this same data follows you across desktop and Android. Nothing else in your OneDrive is touched.</p>
-    <button class="btn btn-primary" id="signInBtn">Sign in with Microsoft</button>
+    <h2>Sign in</h2>
+    <p>Your breeding combos and Palpedia sync through your own database, so the same data follows you across desktop and Android. Enter your email and we'll send you a one-time sign-in link — no password to remember.</p>
+    <div class="ac-wrap" style="margin-bottom:10px;"><input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" style="width:100%;"></div>
+    <button class="btn btn-primary" id="signInBtn">Email me a sign-in link</button>
     <div class="auth-error" id="authError"></div>
+    <div id="authSent" style="display:none; margin-top:16px; color:var(--text-muted); font-size:13.5px; line-height:1.5;">
+      ✅ Check your inbox — we sent a sign-in link to <b id="sentTo"></b>. Open it on this device to finish signing in. You can close this once you've clicked it.
+    </div>
   </div>
 </div>
 
@@ -296,7 +300,7 @@
       <button class="btn btn-sm btn-danger" id="signOutBtn">Sign out</button>
     </div>
     <h4 style="margin-top:16px;">Manual backup</h4>
-    <p>A local safety copy, separate from OneDrive sync.</p>
+    <p>A local safety copy, separate from cloud sync.</p>
     <div class="row">
       <button class="btn btn-sm" id="exportBtn">Copy backup JSON</button>
       <button class="btn btn-sm btn-danger" id="resetBtn">Erase all data</button>
@@ -314,7 +318,7 @@
   <div class="hero">
     <div class="eyebrow"><span class="egg-dot"></span>Pal Breeding Ledger</div>
     <h1>Your breeding combos, your data</h1>
-    <p>The wikis don't agree with each other. Log the combinations you've actually confirmed, filter by parent or child, and chart multi-step breeding paths to whatever Pal you're chasing — synced through your own OneDrive.</p>
+    <p>The wikis don't agree with each other. Log the combinations you've actually confirmed, filter by parent or child, and chart multi-step breeding paths to whatever Pal you're chasing — synced across your devices.</p>
     <div class="stats">
       <div class="stat"><b id="statCombos">0</b> combos logged</div>
       <div class="stat"><b id="statPals">0</b> pals tracked</div>
@@ -500,26 +504,23 @@
   const $$ = s => document.querySelectorAll(s);
 
   // ---------------------------------------------------------------
-  // CONFIG — fill these in after you register the app in Azure.
+  // CONFIG — paste your Supabase project's values here.
+  // Find them in your Supabase dashboard under Settings → API.
+  // Both are safe to expose in client-side code (the anon key is
+  // designed to be public; Row Level Security protects your data).
   // See README.md for step-by-step instructions.
   // ---------------------------------------------------------------
   const CONFIG = {
-    clientId: "a8c415b2-21c3-4880-ac2d-d537b1e90db4",
-    authority: "https://login.microsoftonline.com/consumers", // personal Microsoft accounts (OneDrive personal)
-    scopes: ["Files.ReadWrite.AppFolder", "User.Read"],
-    dataFileName: "pal-breeding-data.json"
+    supabaseUrl: "https://pklaoavuilllrpvdirtl.supabase.co",   // e.g. https://abcdefgh.supabase.co
+    supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBrbGFvYXZ1aWxsbHJwdmRpcnRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNzMzODcsImV4cCI6MjEwMjg0OTM4N30.dA5Pn2pfo0VbIgMGsk0C4euAAlU7LfxqJ8JOUntH9-k"
   };
 
-  const msalInstance = (typeof msal !== 'undefined') ? new msal.PublicClientApplication({
-    auth: {
-      clientId: CONFIG.clientId,
-      authority: CONFIG.authority,
-      redirectUri: window.location.origin + window.location.pathname
-    },
-    cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false }
-  }) : null;
+  const supabaseReady = !CONFIG.supabaseUrl.startsWith('PASTE_') && !CONFIG.supabaseAnonKey.startsWith('PASTE_');
+  const sb = (typeof supabase !== 'undefined' && supabaseReady)
+    ? supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey)
+    : null;
 
-  let account = null;
+  let account = null; // holds the Supabase user object once signed in
   let isOnline = navigator.onLine;
   let hasLoadedOnce = false;
   const LOCAL_CACHE_KEY = 'pal-breeding-local-cache';
@@ -657,7 +658,7 @@
   }
 
   async function persist(){
-    await pushToOneDrive();
+    await pushToCloud();
   }
 
   async function loadPalpedia(){
@@ -665,7 +666,7 @@
   }
 
   async function persistPalpedia(){
-    await pushToOneDrive();
+    await pushToCloud();
   }
 
   /* ---------------- Sync status UI ---------------- */
@@ -693,28 +694,41 @@
 
   /* ---------------- Auth ---------------- */
   async function initAuth(){
-    if(!msalInstance){
+    if(!sb){
       $('#authGate').style.display = 'flex';
-      showAuthError('Could not load the Microsoft sign-in library — check your internet connection and reload.');
+      if(typeof supabase === 'undefined'){
+        showAuthError('Could not load the sign-in library — check your internet connection and reload.');
+      } else {
+        showAuthError('This app has not been configured yet — set your Supabase URL and anon key in index.html. See README.md.');
+      }
       return;
     }
-    let redirectResult = null;
-    try{
-      redirectResult = await msalInstance.handleRedirectPromise();
-    }catch(e){
-      showAuthError('Sign-in failed: ' + (e && e.message ? e.message : 'unknown error'));
-    }
-    const accounts = msalInstance.getAllAccounts();
-    account = redirectResult?.account || (accounts.length ? accounts[0] : null);
 
+    // React to auth changes (magic-link click lands back here with a session).
+    sb.auth.onAuthStateChange((_event, session)=>{
+      const user = session?.user || null;
+      if(user && !account){
+        account = user;
+        onSignedIn();
+      } else if(!user && account){
+        account = null;
+        window.location.reload(); // cleanest reset back to the sign-in gate
+      }
+    });
+
+    const { data } = await sb.auth.getSession();
+    account = data?.session?.user || null;
     if(account){
-      msalInstance.setActiveAccount(account);
-      $('#authGate').style.display = 'none';
-      $('#acctEmail').textContent = 'Signed in as ' + (account.username || account.name || 'your Microsoft account');
-      await startApp();
+      onSignedIn();
     } else {
       $('#authGate').style.display = 'flex';
     }
+  }
+
+  function onSignedIn(){
+    $('#authGate').style.display = 'none';
+    $('#acctEmail').textContent = 'Signed in as ' + (account.email || 'your account');
+    startApp();
   }
 
   function showAuthError(msg){
@@ -724,64 +738,64 @@
   }
 
   async function signIn(){
-    if(!msalInstance){
-      showAuthError('The Microsoft sign-in library did not load — check your connection and reload the page.');
+    if(!sb){
+      showAuthError('The sign-in library did not load, or the app is not configured yet. See README.md.');
       return;
     }
-    if(!CONFIG.clientId || CONFIG.clientId.startsWith('PASTE_')){
-      showAuthError('This app has not been configured yet — set CONFIG.clientId in index.html to your Azure app registration\'s Client ID. See README.md.');
+    const email = norm($('#emailInput').value);
+    if(!email || !email.includes('@')){
+      showAuthError('Please enter a valid email address.');
       return;
     }
+    $('#authError').classList.remove('show');
+    $('#signInBtn').disabled = true;
+    $('#signInBtn').textContent = 'Sending…';
     try{
-      await msalInstance.loginRedirect({ scopes: CONFIG.scopes });
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.origin + window.location.pathname }
+      });
+      if(error) throw error;
+      $('#sentTo').textContent = email;
+      $('#authSent').style.display = 'block';
+      $('#signInBtn').style.display = 'none';
+      $('#emailInput').style.display = 'none';
     }catch(e){
-      showAuthError('Sign-in failed: ' + (e && e.message ? e.message : 'unknown error'));
+      showAuthError('Could not send the link: ' + (e && e.message ? e.message : 'unknown error'));
+      $('#signInBtn').disabled = false;
+      $('#signInBtn').textContent = 'Email me a sign-in link';
     }
   }
 
   async function signOut(){
     try{
-      await msalInstance.logoutRedirect();
+      await sb.auth.signOut();
+      // onAuthStateChange handles the reload
     }catch(e){
       showToast('Sign-out failed.');
     }
   }
 
-  async function getAccessToken(){
-    if(!account) throw new Error('not-signed-in');
-    try{
-      const result = await msalInstance.acquireTokenSilent({ scopes: CONFIG.scopes, account });
-      return result.accessToken;
-    }catch(e){
-      if(e instanceof msal.InteractionRequiredAuthError){
-        const result = await msalInstance.acquireTokenPopup({ scopes: CONFIG.scopes });
-        return result.accessToken;
-      }
-      throw e;
-    }
+  /* ---------------- Supabase row storage ---------------- */
+  // One row per user in the `breeding_data` table, holding the whole
+  // { combos, palpedia } blob as JSON. RLS ensures a user only ever
+  // sees their own row.
+
+  async function fetchFromCloud(){
+    const { data, error } = await sb
+      .from('breeding_data')
+      .select('data')
+      .eq('user_id', account.id)
+      .maybeSingle();
+    if(error) throw error;
+    return data ? data.data : null; // null = no row yet (first run)
   }
 
-  /* ---------------- OneDrive Graph calls ---------------- */
-  const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
-
-  async function fetchFromOneDrive(){
-    const token = await getAccessToken();
-    const url = `${GRAPH_BASE}/me/drive/special/approot:/${encodeURIComponent(CONFIG.dataFileName)}:/content`;
-    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-    if(res.status === 404) return null; // file doesn't exist yet — first run
-    if(!res.ok) throw new Error('graph-read-failed:' + res.status);
-    return await res.json();
-  }
-
-  async function saveToOneDrive(data){
-    const token = await getAccessToken();
-    const url = `${GRAPH_BASE}/me/drive/special/approot:/${encodeURIComponent(CONFIG.dataFileName)}:/content`;
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if(!res.ok) throw new Error('graph-write-failed:' + res.status);
+  async function saveToCloud(payload){
+    const { error } = await sb
+      .from('breeding_data')
+      .upsert({ user_id: account.id, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    if(error) throw error;
   }
 
   async function loadRemoteData(){
@@ -805,7 +819,7 @@
 
     setSyncPill('syncing', 'Syncing…');
     try{
-      const remote = await fetchFromOneDrive();
+      const remote = await fetchFromCloud();
       const data = remote || { combos: [], palpedia: PALPEDIA_SEED };
       combos = data.combos || [];
       palpedia = (data.palpedia && data.palpedia.length) ? data.palpedia : PALPEDIA_SEED;
@@ -815,7 +829,7 @@
       isOnline = true;
       setSyncPill('synced', 'Synced');
       setOfflineBanner(false);
-      if(!remote) await pushToOneDrive(); // first run — seed the file
+      if(!remote) await pushToCloud(); // first run — seed the row
     }catch(e){
       isOnline = false;
       setSyncPill('offline', cached ? 'Offline — cached copy' : 'Connection error');
@@ -826,7 +840,7 @@
     }
   }
 
-  async function pushToOneDrive(){
+  async function pushToCloud(){
     writeLocalCache({ combos, palpedia });
     if(!navigator.onLine){
       isOnline = false;
@@ -837,7 +851,7 @@
     }
     setSyncPill('syncing', 'Saving…');
     try{
-      await saveToOneDrive({ combos, palpedia });
+      await saveToCloud({ combos, palpedia });
       setSyncPill('synced', 'Synced');
       setOfflineBanner(false);
       return true;
@@ -845,12 +859,12 @@
       isOnline = false;
       setSyncPill('offline', 'Save failed');
       setOfflineBanner(true);
-      showToast('Could not reach OneDrive — your change is only saved on this device for now.');
+      showToast('Could not reach the database — your change is only saved on this device for now.');
       return false;
     }
   }
 
-  window.addEventListener('online', ()=>{ isOnline = true; loadRemoteData(); });
+  window.addEventListener('online', ()=>{ isOnline = true; if(account) loadRemoteData(); });
   window.addEventListener('offline', ()=>{
     isOnline = false;
     setSyncPill('offline', 'Offline');
@@ -1424,12 +1438,16 @@
   $('#resetBtn').addEventListener('click', resetAll);
 
   $('#signInBtn').addEventListener('click', signIn);
+  $('#emailInput').addEventListener('keydown', e=>{ if(e.key === 'Enter') signIn(); });
   $('#signOutBtn').addEventListener('click', signOut);
   $('#syncNowBtn').addEventListener('click', ()=>{ $('#settingsPop').classList.remove('open'); loadRemoteData(); });
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register('sw.js').catch(()=>{ /* offline shell caching is a nice-to-have, not required */ });
+      // Bump ?v=N here every time sw.js changes — a different URL forces the
+      // browser to fetch and evaluate it as a new worker, sidestepping any
+      // stale HTTP-cached copy of the old sw.js.
+      navigator.serviceWorker.register('sw.js?v=3').catch(()=>{ /* offline shell caching is a nice-to-have, not required */ });
     });
   }
 
