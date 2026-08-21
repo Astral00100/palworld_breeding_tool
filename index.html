@@ -538,7 +538,9 @@
 
   const supabaseReady = !CONFIG.supabaseUrl.startsWith('PASTE_') && !CONFIG.supabaseAnonKey.startsWith('PASTE_');
   const sb = (typeof supabase !== 'undefined' && supabaseReady)
-    ? supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey)
+    ? supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
+        db: { schema: 'palworld' }
+      })
     : null;
 
   let account = null; // holds the Supabase user object once signed in
@@ -1468,7 +1470,7 @@
       // Bump ?v=N here every time sw.js changes — a different URL forces the
       // browser to fetch and evaluate it as a new worker, sidestepping any
       // stale HTTP-cached copy of the old sw.js.
-      navigator.serviceWorker.register('sw.js?v=4').catch(()=>{ /* offline shell caching is a nice-to-have, not required */ });
+      navigator.serviceWorker.register('sw.js?v=5').catch(()=>{ /* offline shell caching is a nice-to-have, not required */ });
     });
   }
 
